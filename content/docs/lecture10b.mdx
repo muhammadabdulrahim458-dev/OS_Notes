@@ -1,5 +1,5 @@
 ---
-title: Lecture 10 (Short)
+title: Lecture 10 (100%)
 description: CPU Scheduling (Part 2), Evaluation & Process Synchronization
 ---
 
@@ -47,6 +47,7 @@ Imagine a **call center** with 5 customer service reps (cores).
 - **SMP (Symmetric Multiprocessing)**: All CPUs are equal. The OS schedules them symmetrically. 
 - **Multicore CPUs**: Multiple cores on one physical chip (faster communication).
 - **Chip-Multithreading (CMT) / Hyperthreading**: One physical core has 2 (or more) hardware threads. The OS sees these as **logical processors**. If one thread stalls on memory, the core switches to the other hardware thread instantly.
+- **Heterogeneous multiprocessing**: CPUs in the system are not identical (e.g., a mix of high-power and low-power cores, like big.LITTLE architecture on smartphones). The OS must know which tasks are suitable for which type of core.
 ![Image](/cmt.png)
 
 #### 2. Scheduling Approaches (Slide 3)
@@ -112,12 +113,21 @@ CFS eliminates the rigid "time slice" concept. It dynamically adapts to the numb
 Think of a **teacher** trying to give attention to students. The teacher keeps a "fairness score" (`vruntime`). The student who has received the *least* attention gets called on next. If a student is naughty (low priority), their "attention count" decays slower—so they wait longer.
 
 ### How CFS Works (Slides 13-15)
-1. **Priorities**: `nice` values range from -20 (highest priority) to +19 (lowest). 
-2. **Target Latency**: The time interval in which every runnable task should get at least one turn on the CPU. 
-3. **`vruntime`**: 
+1. **Scheduling Classes**: Linux has two scheduling classes—**default** (time-sharing) and **real-time**. The scheduler always picks the highest priority task from the highest scheduling class first.
+2. **Priorities**: `nice` values range from -20 (highest priority) to +19 (lowest). 
+3. **Target Latency**: The time interval in which every runnable task should get at least one turn on the CPU. 
+4. **`vruntime`**: 
    - If a process has default priority (nice=0), `vruntime` = actual run time.
    - If a process has *higher* priority (nice < 0), its `vruntime` grows *slower*—so it stays on the left side of the tree and runs more often.
-4. **The Data Structure**: CFS stores runnable processes in a **Red-Black Tree** (a balanced binary search tree). The key is `vruntime`. The **leftmost node** has the smallest `vruntime`—meaning it needs CPU the most. Linux caches this leftmost node, making the decision **O(1)** in practice!
+5. **The Data Structure**: CFS stores runnable processes in a **Red-Black Tree** (a balanced binary search tree). The key is `vruntime`. The **leftmost node** has the smallest `vruntime`—meaning it needs CPU the most. 
+   - **Optimization**: Finding the leftmost node in a balanced tree usually takes \(O(\lg N)\) operations. However, for efficiency, Linux caches this value in a variable called `rb_leftmost`, making the decision **O(1)** in practice!
+6. **O(1) Scheduler Details (Slide 12)**: The older O(1) scheduler used two priority arrays—`active` and `expired`. Tasks in the active array had time left in their time slice; once their time expired, they were moved to the expired array. When the active array was empty, the arrays were swapped. It worked well, but poor response times for interactive processes caused its demise.
+
+**Topic: Linux Scheduling Domains (Slide 16)**
+- Linux groups CPUs into **Scheduling Domains** based on what hardware resources they share (e.g., L2 cache, L3 cache, or an entire NUMA node).
+- The primary goal is to keep threads from migrating between domains, because leaving a domain means losing cache locality.
+- Load balancing is performed within these domains to avoid costly cross-domain migrations.
+- *Diagram note*: Slide 16 shows `domain0` sharing an L2 cache, and `domain1` sharing another, while both share an L3 cache. Migrating within `domain0` is cheap; migrating to `domain1` is expensive.
 
 ---
 
@@ -146,7 +156,8 @@ Windows uses a **priority-based preemptive scheduler**. The thread with the high
 ### How It Works (Slides 17-20)
 1. **Process Priority Classes**: Processes have classes like `REALTIME`, `HIGH`, `NORMAL`, `IDLE`.
 2. **Thread Relative Priorities**: Threads have relative levels like `TIME_CRITICAL`, `HIGHEST`, `NORMAL`, `LOWEST`, `IDLE`.
-3. **The Matrix**: Combining the class and relative priority gives the numeric priority (e.g., `HIGH` class + `ABOVE_NORMAL` = Priority 12).
+3. **The Matrix (Slide 19)**: Combining the class and relative priority gives the numeric priority. 
+   - **Example**: `NORMAL_PRIORITY_CLASS` (base = 8) + `TIME_CRITICAL` (boost = 7) = Priority **15**. `REALTIME_PRIORITY_CLASS` + `TIME_CRITICAL` = Priority **31** (maximum).
 4. **Priority Boosts**: 
    - If a thread is waiting for I/O (like a keyboard press), Windows boosts its priority so it responds immediately.
    - Foreground applications (the window you're looking at) get a **3x priority boost** to feel snappy.
@@ -248,12 +259,14 @@ How do we know which algorithm is best? We can't just guess. We use three method
 
 3. **Simulations** (Most Accurate) - Slides 26-27
    - Write a program that mimics the OS and generates random events (CPU bursts, I/O) based on probability distributions. 
+   - **Detail**: We gather data for the simulation via a **random number generator according to probabilities** (typically exponential distributions) that mirror real system behaviors.
    - Run the simulation to gather stats. 
    - *Limitation*: Still not perfectly accurate to real-world environments.
 ![Image](/simulation.png)
 
 4. **Implementation** (Real Testing)
    - Put the new scheduler into a real OS and test it. High risk, but the only guarantee.
+   - **Implementation caveat (Slide 28)**: Even real testing has limitations because environments vary. Most flexible schedulers can actually be **modified per-site or per-system**, or offer APIs to modify priorities. But again, the real-world environment varies wildly.
 
 ### Memory Trick
 <Callout type="success">
@@ -273,7 +286,25 @@ If we don't control their access, we get a **Race Condition**—where the final 
 
 ---
 
-### The Producer-Consumer Problem (Slides 33-36)
+**The Classic Producer-Consumer Code (Slides 33-34 vs Slide 35)**
+
+Slide 33 & 34 show a **classic circular buffer solution using the `in` and `out` indices**:
+
+- **Producer**: `while (((in + 1) % BUFFER_SIZE) == out) ; /* do nothing */` (Wait if buffer is full).
+- **Consumer**: `while (in == out) ; /* do nothing */` (Wait if buffer is empty).
+
+*Note on Slide 31:* The slide asks, "How to convert to an unbounded buffer?" The answer: Remove the `while (in + 1 == out)` condition so the producer never waits, allowing infinite growth. However, this is dangerous because it can consume all available memory.
+
+Slide 35 introduces a **simpler approach using a `count` variable**:
+
+- **Producer**: `while (count == BUFFER_SIZE) ; /* do nothing */`
+- **Consumer**: `while (count == 0) ; /* do nothing */`
+
+**Crucial difference**: Using `count` allows us to fully utilize the buffer up to `BUFFER_SIZE` items (instead of `BUFFER_SIZE-1` in the index-based method). However, as we'll see next, the `count++` and `count--` operations are not atomic, making this code vulnerable to race conditions.
+
+---
+
+### The Producer-Consumer Problem (Slides 35-36)
 We have a shared `count` variable that tracks how many items are in the buffer.
 - **Producer** does: `count++`
 - **Consumer** does: `count--`
@@ -322,6 +353,17 @@ We must design an entry/exit protocol around it that satisfies **3 Golden Rules*
   - `signal(S)` (or `V`): `S++`.
 - This can manage *multiple* resources (e.g., 5 printers available, `S=5`). If `S=1`, it acts like a mutex (called a Binary Semaphore).
 
+**Exact Pseudocode from Slide 41**:
+```c
+wait(S) {
+    while (S <= 0) ;  /* busy wait */
+    S--;
+}
+
+signal(S) {
+    S++;
+}
+```
 *Note on Slide 41*: The `while (S <= 0);` is **busy-waiting**—the CPU spins in a loop wasting cycles. We will improve this later (using blocking queues), but conceptually, it's a valid solution.
 
 ---
@@ -384,4 +426,3 @@ flowchart LR
 3.  Assume `count = 10`. Trace a sequence of instructions where the Producer executes `count++` and the Consumer executes `count--` concurrently, resulting in a final `count` of `9`. Show the Register values.
 4.  What is the difference between a Mutex lock and a Counting Semaphore? Give a practical example where a Semaphore (count > 1) is absolutely necessary.
 5.  Compare and contrast deterministic modeling, queueing models, and simulations for evaluating CPU scheduling algorithms. Which is most accurate and why?
-
