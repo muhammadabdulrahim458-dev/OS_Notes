@@ -1,0 +1,260 @@
+---
+title: Past Paper 2k20
+description: UET Taxila – OS Final Exam (Fall 2020) – Solved Paper 
+---
+
+## Q#1: How can you analyze and evaluate different algorithms of CPU scheduling we have read in this course? (CLO2, 10 Marks)
+
+**Answer:**
+To analyze CPU scheduling algorithms, we don't just guess—we use three scientific methods that trade off accuracy for complexity:
+
+**1. Deterministic Modeling (Analytic Evaluation)**
+- **How it works:** We take a fixed, predetermined workload (exact burst times for specific processes) and manually calculate performance metrics like average waiting time or turnaround time for each algorithm.
+- **Example:** Given processes `P1(10), P2(29), P3(3)`, we run FCFS, SJF, and Round Robin on paper and compare results.
+- **Pros:** Extremely fast, simple, and easy to debug.
+- **Cons:** Only applies to the exact input provided. It cannot generalize to real-world variable workloads.
+
+**2. Queueing Models (Mathematical Evaluation)**
+- **How it works:** We model processes using probability distributions (often exponential distributions for CPU and I/O bursts). Using formulas like **Little's Law**, we compute average throughput, utilization, and waiting time.
+- **Formula:** `Average Queue Length (n) = Arrival Rate (λ) × Average Wait Time (W)`.
+- **Pros:** Helps model probabilistic system behavior without needing exact input.
+- **Cons:** Limited accuracy because real systems have complex, unpredictable bursts that math cannot perfectly capture.
+
+**3. Simulations (Software Evaluation)**
+- **How it works:** We write a computer program that acts as an OS scheduler. We feed it randomly generated data (based on realistic probability distributions) and simulate thousands of events to gather statistics. 
+- **Pros:** Much more accurate than analytic methods because it mimics real randomness.
+- **Cons:** Still limited by the accuracy of the random distributions chosen. It is also time-consuming to write.
+
+**4. Real Implementation (Most Accurate but Risky)**
+- **How it works:** The actual scheduling algorithm is written into the OS kernel and deployed on real hardware for testing.
+- **Pros:** Guaranteed real-world accuracy.
+- **Cons:** Extremely high risk; a bug could crash the entire system. It is highly expensive and only used as a final validation step.
+
+---
+
+## Q#2: For the following set of processes compute average turnaround time by varying time quantum in the range of 1ms to 5ms (with a step increase of 1ms) for round robin scheduling algorithm? (CLO2, 10 Marks)
+
+**Given Data:**
+- Processes: P1 (6ms), P2 (3ms), P3 (1ms), P4 (7ms)
+- All processes arrive at time `0`.
+- Turnaround Time (TAT) = Completion Time - Arrival Time.
+
+**Step 1: Quick Gantt Chart Example (Time Quantum = 1ms)**
+- Queue: `[P1, P2, P3, P4]`
+- 0-1 (P1), 1-2 (P2), 2-3 (P3 - Finished, TAT=3), 3-4 (P4), 4-5 (P1), 5-6 (P2), 6-7 (P4), 7-8 (P1), 8-9 (P2 - Finished, TAT=9), 9-10 (P4), 10-11 (P1), 11-12 (P4), 12-13 (P1), 13-14 (P4), 14-15 (P1), 15-16 (P4), 16-17 (P1 - Finished, TAT=17), 17-18 (P4 - Finished, TAT=18).
+
+**Step 2: Summary Table for all Time Quanta (1ms to 5ms)**
+
+| Time Quantum (ms) | Completion Times (P1, P2, P3, P4) | Turnaround Times (P1, P2, P3, P4) | **Average Turnaround Time** |
+| :--- | :--- | :--- | :--- |
+| **1 ms** | 17, 9, 3, 18 | 17, 9, 3, 18 | `(17+9+3+18)/4 = 11.75 ms` |
+| **2 ms** | 15, 8, 2, 17 | 15, 8, 2, 17 | `(15+8+2+17)/4 = 10.5 ms` |
+| **3 ms** | 12, 9, 3, 17 | 12, 9, 3, 17 | `(12+9+3+17)/4 = 10.25 ms` |
+| **4 ms** | 12, 10, 4, 16 | 12, 10, 4, 16 | `(12+10+4+16)/4 = 10.5 ms` |
+| **5 ms** | 11, 13, 6, 16 | 11, 13, 6, 16 | `(11+13+6+16)/4 = 11.5 ms` |
+
+**Optimal Time Quantum:** **3 ms** gives the best average turnaround time of **10.25 ms** for this specific set. 
+
+*Teacher's Note: Showing the Gantt chart for TQ=1 and a summary table for the rest proves you know how to compute it quickly under exam time constraints and gets you full credit without wasting time drawing 5 massive charts.*
+
+---
+
+## Q#3: Suppose all our efforts are unsuccessful and system got into deadlock state, now how can we detect which processes are in deadlock state and which processes are not in a deadlock state? (CLO2, 10 Marks)
+
+**Answer:**
+The detection method depends on the type of resource allocation in the system.
+
+**Case 1: Single Instance per Resource Type (Wait-For Graph Method)**
+If every resource has only one instance, we convert the **Resource Allocation Graph (RAG)** into a **Wait-For Graph (WFG)**.
+- **Method:** Remove all resource nodes (rectangles). If Process A is waiting for a resource held by Process B, draw a direct edge `A → B`.
+- **Detection:** Run a graph traversal algorithm (like Depth-First Search) to find a cycle.
+  - If a **cycle exists** → All processes in the cycle are **deadlocked**.
+  - If **no cycle exists** → No process is deadlocked.
+- **Complexity:** Requires `O(n²)` operations, where `n` is the number of vertices.
+- **Visual Example:**
+```mermaid
+flowchart LR
+    subgraph RAG["Resource Allocation Graph"]
+        R1[R1] --> T1((T1))
+        T2((T2)) --> R1
+        T3((T3)) --> R2[R2]
+        R2 --> T2
+    end
+    
+    subgraph WFG["Wait-For Graph"]
+        T2_WFG((T2)) --> T1_WFG((T1))
+        T3_WFG((T3)) --> T2_WFG((T2))
+        style T2_WFG fill:#ffcccc,stroke:#ff0000
+        style T3_WFG fill:#ffcccc,stroke:#ff0000
+    end
+```
+*Explanation:* `T3` waits for `T2`, and `T2` waits for `T1`. The edge `T3 → T2 → T1` means no cycle. Wait, if there was a back edge `T1 → T3`, then it's a cycle. In WFG, any cycle means deadlock. 
+
+**Case 2: Multiple Instances per Resource Type (Detection Algorithm)**
+We use the **Deadlock Detection Algorithm** which uses 3 matrices:
+- `Available`: Free resources.
+- `Allocation`: Resources held by each thread.
+- `Request`: Resources currently requested by each thread.
+
+**Algorithm Steps:**
+1. Initialize `Work = Available`. Initialize `Finish[i] = true` if `Allocation[i] == 0` (threads with zero resources can never be deadlocked). Otherwise `Finish[i] = false`.
+2. Find an index `i` where `Finish[i] == false` AND ``Request[i] <= Work``.
+3. If found: `Work = Work + Allocation[i]`, `Finish[i] = true`, and repeat Step 2.
+4. If no such `i` exists, the system is deadlocked. Any thread with `Finish[i] == false` is **deadlocked**. The rest are **not in a deadlock state**.
+
+---
+
+## Q#4: What are pros and cons of contiguous and non-contiguous memory allocation techniques. Under which conditions contiguous technique is more favorable than non-contiguous technique? (CLO2, 10 Marks)
+
+**Answer:**
+Here is a clear comparison table:
+
+| Aspect | **Contiguous Allocation** | **Non-Contiguous Allocation** (Paging/Segmentation) |
+| :--- | :--- | :--- |
+| **How it works** | A process must be loaded into one single, consecutive block of physical memory. | A process is split into pages/segments; they can be scattered anywhere in physical memory. |
+| **Hardware Support** | Simple Base/Limit Registers. | Complex MMU with Page/Segment Tables. |
+| **External Fragmentation** | **High.** Free memory becomes scattered into tiny unusable holes. | **None.** Physical frames are fixed-size; any frame can fit any page. |
+| **Internal Fragmentation** | **Low** (if variable partition). | **High.** The last frame allocated to a process is rarely fully used. |
+| **Protection & Sharing** | Simple to protect (Base/Limit), but difficult to share memory between processes. | Easy to share reentrant code by mapping page tables to the same frames. |
+
+**Conditions where Contiguous Technique is MORE favorable:**
+1. **Small Embedded Systems:** In low-power, real-time embedded devices (like a microcontroller in a microwave), the OS is simple and processes are small. The overhead of an MMU and page tables is too high; contiguous allocation's simple hardware is preferred.
+2. **Batch Systems:** In older batch systems where processes run sequentially (one at a time), fragmentation is less of an issue because there is no multiprogramming interference.
+3. **Real-Time Systems:** Contiguous allocation provides **predictable memory access times** because the entire process is in one physical block. Paging introduces the risk of page faults, which cause unpredictable delays—unacceptable for strict real-time constraints.
+
+---
+
+## Q#5: How can we solve two memory access problem in paging? (CLO3, 10 Marks)
+
+**Answer:**
+The **Two-Memory-Access Problem** occurs because the page table is stored entirely in main memory (RAM). Every single time the CPU wants to read a piece of data, the MMU must do:
+1. Access Memory #1 (Page Table) → Get the frame number.
+2. Access Memory #2 (The actual Data frame) → Fetch the data.
+This doubles memory access time for every instruction, severely slowing down the system.
+
+**The Solution: The Translation Look-Aside Buffer (TLB)**
+The solution is a specialized, extremely fast hardware cache built directly into the MMU called the **TLB (Translation Look-Aside Buffer)**.
+- The TLB stores recently used `(Page Number, Frame Number)` mappings.
+- **TLB Hit (Fast):** When the CPU generates a logical address, the MMU checks the TLB first. If the page number is found, the MMU instantly gets the frame number in **1 CPU cycle**. It skips the RAM access for the page table. Memory access is now **1 step (only the data)**.
+- **TLB Miss (Slow, but mitigated):** If the page number is **not** in the TLB, the MMU falls back to the 2-access method. However, upon a miss, the MMU *immediately* fetches the mapping from the page table in RAM and updates the TLB with it. If the TLB has a high **Hit Ratio**, the overall memory access time plummets.
+
+**Visual Explanation:**
+```mermaid
+flowchart LR
+    CPU[CPU] --> LA["Logical Address (p, d)"]
+    LA --> TLB["TLB (Fast Cache)"]
+    
+    TLB -- "TLB HIT" --> Frame["Get Frame # instantly"]
+    TLB -- "TLB MISS" --> PageTable["Access Page Table (in Main Memory)"]
+    
+    Frame --> PA["Physical Address (f, d)"]
+    PageTable --> PA
+    PA --> Memory[Physical Memory]
+    
+    PageTable -.-> TLB
+```
+*(Pro Tip for scoring: Mention "ASIDs" to prevent flushing the TLB on context switches and "Effective Access Time (EAT)" formula to show you truly grasp the hardware-level details!)*
+
+---
+
+## Q#6: How can we provide memory protection and memory sharing in paging memory allocation technique? (CLO3, 10 Marks)
+
+**Answer:**
+Paging provides excellent hardware-based mechanisms for both protection and sharing.
+
+**1. Memory Protection:**
+Protection is achieved by adding **Protection Bits** and a **Valid-Invalid Bit** to every entry in the Page Table:
+- **Valid-Invalid Bit:** `1` (Valid) means the page is in the process's logical address space and legal to access. `0` (Invalid) means the page is out of bounds. If the CPU tries to access an invalid page, the MMU triggers a trap to the OS (illegal addressing error), aborting the process.
+- **Protection Bits (Read/Write/Execute):** The OS assigns bits to each page indicating if it is read-only, read-write, or execute-only. For example, if a process tries to write to a read-only page, the hardware generates a protection fault.
+- **ASID (in TLB):** Address-Space Identifiers ensure that a process cannot access cached page table entries belonging to another process, providing strict inter-process isolation.
+
+**2. Memory Sharing (Shared Pages):**
+Paging allows multiple processes to share code by pointing their page tables to the **same physical frame** in RAM.
+- **How it works:** Process P1's Page Table entry for `libc 1` maps to Physical Frame 3. Process P2's Page Table entry for `libc 1` also maps to Physical Frame 3.
+- **Constraint:** The shared pages must be **reentrant (pure/read-only) code**. If one process modified the shared page, it would corrupt the code for the other process. 
+- **Result:** This drastically saves physical memory. Instead of loading a 2 MB library into RAM for every single process, the OS loads just one physical copy and shares it across 50 running processes.
+
+---
+
+## Q#7: Consider the following page reference string: `1, 3, 3, 4, 1, 1, 5, 6, 2, 6, 2, 3, 7, 6, 3, 2, 7, 2, 3, 6`. Apply LRU and Optimal page replacement algorithms to determine how many page faults would occur for the above reference string, assuming four frames available? (CLO3, 10 Marks)
+
+**Given:**
+- Reference String: `1, 3, 3, 4, 1, 1, 5, 6, 2, 6, 2, 3, 7, 6, 3, 2, 7, 2, 3, 6`
+- Number of Frames = 4. Initially empty.
+
+**Part A: LRU (Least Recently Used) Algorithm**
+In LRU, if a page is referenced, it is moved to the *front/top* of the usage order. The victim is the page at the *back/bottom* of the list.
+
+| Step | Reference | **Frames in Memory** | Page Fault? |
+| :--- | :--- | :--- | :--- |
+| 1 | 1 | [1] | **Fault 1** |
+| 2 | 3 | [3, 1] | **Fault 2** |
+| 3 | 3 | [3, 1] | Hit |
+| 4 | 4 | [4, 3, 1] | **Fault 3** |
+| 5 | 1 | [1, 4, 3] | Hit |
+| 6 | 1 | [1, 4, 3] | Hit |
+| 7 | 5 | [5, 1, 4, 3] | **Fault 4** (Frames now full) |
+| 8 | 6 | [6, 5, 1, 4] → (3 evicted) | **Fault 5** |
+| 9 | 2 | [2, 6, 5, 1] → (4 evicted) | **Fault 6** |
+| 10 | 6 | [6, 2, 5, 1] | Hit |
+| 11 | 2 | [2, 6, 5, 1] | Hit |
+| 12 | 3 | [3, 2, 6, 5] → (1 evicted) | **Fault 7** |
+| 13 | 7 | [7, 3, 2, 6] → (5 evicted) | **Fault 8** |
+| 14 | 6 | [6, 7, 3, 2] | Hit |
+| 15 | 3 | [3, 6, 7, 2] | Hit |
+| 16 | 2 | [2, 3, 6, 7] | Hit |
+| 17 | 7 | [7, 2, 3, 6] | Hit |
+| 18 | 2 | [2, 7, 3, 6] | Hit |
+| 19 | 3 | [3, 2, 7, 6] | Hit |
+| 20 | 6 | [6, 3, 2, 7] | Hit |
+
+**LRU Total Page Faults = 8**
+
+---
+
+**Part B: Optimal (OPT) Algorithm**
+In OPT, when a page must be evicted, we look into the *future* and evict the page that will be needed farthest in the future (or never needed again).
+
+| Step | Reference | **Frames in Memory** | Page Fault? |
+| :--- | :--- | :--- | :--- |
+| 1 | 1 | [1] | **Fault 1** |
+| 2 | 3 | [3, 1] | **Fault 2** |
+| 3 | 3 | [3, 1] | Hit |
+| 4 | 4 | [4, 3, 1] | **Fault 3** |
+| 5 | 1 | [4, 3, 1] | Hit |
+| 6 | 1 | [4, 3, 1] | Hit |
+| 7 | 5 | [5, 4, 3, 1] | **Fault 4** (Frames full) |
+| 8 | 6 | [6, 5, 3, 1] → (4 evicted, 4 never used again) | **Fault 5** |
+| 9 | 2 | [2, 6, 5, 3] → (1 evicted, 1 never used again) | **Fault 6** |
+| 10 | 6 | [2, 6, 5, 3] | Hit |
+| 11 | 2 | [2, 6, 5, 3] | Hit |
+| 12 | 3 | [2, 6, 5, 3] | Hit |
+| 13 | 7 | [7, 2, 6, 5] → (3 evicted, 3 used at idx 14, 2 used at idx 15) wait, let's recheck. <br/> Frames: [2,6,5,3].  Look ahead: 2 (idx 15), 6 (idx 13), 5 (never), 3 (idx 14). Evict 5. | **Fault 7** |
+| 14 | 6 | [7, 2, 6, 5] | Hit |
+| 15 | 3 | [3, 7, 2, 6] → (5 evicted? Wait, frames are [7,2,6,5]? no, after step 13, frames are [7,2,6,5]) ... Actually, let me recalc OPT table strictly. | |
+| 16 | 2 | [3, 7, 2, 6] | Hit |
+| 17 | 7 | [3, 7, 2, 6] | Hit |
+| 18 | 2 | [3, 7, 2, 6] | Hit |
+| 19 | 3 | [3, 7, 2, 6] | Hit |
+| 20 | 6 | [3, 7, 2, 6] | Hit |
+
+Let's look back at OPT step 13 more carefully:
+- Start of step 13 (Ref=7, idx 12 of string): Memory = `[2, 6, 5, 3]`.
+- Look ahead in the string from idx 13 to end: `6, 3, 2, 7, 2, 3, 6`.
+- In current frames: `2` used at idx 15, `6` used at idx 13, `5` never used again, `3` used at idx 14.
+- Replace `5` (never used). New frames = `[7, 2, 6, 3]`. (Fault 7).
+- Step 14 (Ref=6, idx 13): Frames = `[7, 2, 6, 3]`. Hit 6.
+- Step 15 (Ref=3, idx 14): Frames = `[7, 2, 6, 3]`. Hit 3.
+- Step 16 (Ref=2, idx 15): Frames = `[7, 2, 6, 3]`. Hit 2.
+- Step 17 (Ref=7, idx 16): Frames = `[7, 2, 6, 3]`. Hit 7.
+- Step 18 (Ref=2, idx 17): Frames = `[7, 2, 6, 3]`. Hit 2.
+- Step 19 (Ref=3, idx 18): Frames = `[7, 2, 6, 3]`. Hit 3.
+- Step 20 (Ref=6, idx 19): Frames = `[7, 2, 6, 3]`. Hit 6.
+
+**OPT Total Page Faults = 7**
+
+---
+
+**Final Summary for Q#7:**
+- **LRU Algorithm:** 8 Page Faults
+- **Optimal Algorithm:** 7 Page Faults
